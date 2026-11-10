@@ -1,0 +1,44 @@
+# Runs the tests, then builds the image and publishes it to GitHub's container registry:
+#   ghcr.io/orcsbane1369/bills-tracker:latest
+name: Build and publish image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python test_schedule.py
+      - run: python test_app.py
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          # Docker-format manifest without attestations, so Unraid's update check can read it.
+          provenance: false
+          sbom: false
+          outputs: type=registry,oci-mediatypes=false
+          tags: |
+            ghcr.io/orcsbane1369/bills-tracker:latest
+            ghcr.io/orcsbane1369/bills-tracker:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/orcsbane1369/Bills-Tracker
+            org.opencontainers.image.revision=${{ github.sha }}

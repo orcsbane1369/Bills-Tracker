@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="topbar">
+  <h1>Recurring Bills Tracker</h1>
+  <div class="who">
+    <span>{{ username }}</span>
+    <form method="post" action="{{ url_for('logout') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="ghost">Sign out</button>
+    </form>
+  </div>
+</header>
+
+<main class="page">
+  <section class="cards" aria-label="Summary">
+    <div class="card red"><span class="lbl">Past due</span><strong id="sumLate">0</strong><span id="sumLateAmt" class="amt"></span></div>
+    <div class="card yellow"><span class="lbl">Due in the next 14 days</span><strong id="sumSoon">0</strong><span id="sumSoonAmt" class="amt"></span></div>
+    <div class="card green"><span class="lbl">Due later</span><strong id="sumLater">0</strong><span id="sumLaterAmt" class="amt"></span></div>
+    <div class="card"><span class="lbl">Balances being tracked</span><strong id="sumBal">$0.00</strong><span id="sumBalN" class="amt"></span></div>
+  </section>
+
+  <section class="toolbar">
+    <div class="group">
+      <button id="btnAdd" class="primary">Add New Bill</button>
+      <button id="btnEdit" disabled>Update Selected Bill</button>
+      <button id="btnPay" class="primary" disabled>Mark as Paid</button>
+      <button id="btnHist" disabled>Payment History</button>
+      <button id="btnDelete" class="danger" disabled>Delete Selected Bill</button>
+    </div>
+    <div class="group">
+      <button id="btnAccts">Manage Accounts</button>
+      <button id="btnImport">Import Bills</button>
+      <a class="btn" href="{{ url_for('export_csv') }}">Export CSV</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <label>Find a bill <input id="q" type="search" placeholder="Type part of a name" autocomplete="off"></label>
+      <label>Account <select id="fAcct"><option value="">All accounts</option></select></label>
+      <span id="count" class="muted" role="status"></span>
+    </div>
+  </section>
+
+  <section class="tablewrap">
+    <table id="billTable">
+      <thead><tr>
+        <th data-k="name">Bill Name</th><th data-k="account">From Account</th>
+        <th data-k="amount_due" class="n">Amount Due</th><th data-k="due_date">Date Due</th>
+        <th data-k="last_paid_date">Date Paid</th><th data-k="freq">Frequency</th>
+        <th data-k="next_due">Next Due</th><th data-k="last_paid_amount" class="n">Paid Previously</th>
+        <th data-k="balance" class="n">Amount Left</th><th data-k="track_balance">Track Remaining</th>
+      </tr></thead>
+      <tbody id="billBody"></tbody>
+    </table>
+    <p id="empty" class="empty" hidden>No bills yet. Use <strong>Add New Bill</strong>, or <strong>Import Bills</strong> to load a file.</p>
+  </section>
+  <p class="muted legend"><span class="chip red">Past due</span> <span class="chip yellow">Due within 14 days</span> <span class="chip green">More than 14 days out</span></p>
+</main>
+
+<!-- Add / update a bill -->
+<dialog id="billDlg" aria-labelledby="billTitle">
+  <form id="billForm" method="dialog">
+    <div class="dlg-head"><h2 id="billTitle">Bill details</h2><button type="button" class="ghost" data-close aria-label="Close">&#10005;</button></div>
+    <div class="dlg-body grid2">
+      <label class="span2">Bill name <input id="b_name" required maxlength="80" autocomplete="off"></label>
+      <label>From account <select id="b_acct"></select></label>
+      <label>Amount due ($) <input id="b_amt" type="number" step="0.01" min="0" required></label>
+      <label>Date due <input id="b_due" type="date" required></label>
+      <div class="freq">
+        <label>Repeats every <input id="b_fv" type="number" min="1" max="365" value="1" required></label>
+        <label>&nbsp;<select id="b_fu"><option value="day">Day(s)</option><option value="week">Week(s)</option><option value="month" selected>Month(s)</option><option value="year">Year(s)</option></select></label>
+      </div>
+      <label>Date last paid <input id="b_lpd" type="date"></label>
+      <label>Amount last paid ($) <input id="b_lpa" type="number" step="0.01" min="0"></label>
+      <label class="inline span2"><input id="b_track" type="checkbox"> Track the remaining balance (each payment lowers it)</label>
+      <label id="b_balWrap" class="span2" hidden>Balance left ($) <input id="b_bal" type="number" step="0.01"></label>
+    </div>
+    <div class="dlg-foot"><span id="billErr" class="error" role="alert"></span><button type="button" data-close>Cancel</button><button class="primary" type="submit">Save</button></div>
+  </form>
+</dialog>
+
+<!-- Mark as paid -->
+<dialog id="payDlg" aria-labelledby="payTitle">
+  <form id="payForm" method="dialog">
+    <div class="dlg-head"><h2 id="payTitle">Mark as paid</h2><button type="button" class="ghost" data-close aria-label="Close">&#10005;</button></div>
+    <div class="dlg-body col">
+      <p id="payInfo" class="muted"></p>
+      <label>Date paid <input id="p_date" type="date" required></label>
+      <label>Amount paid ($) <input id="p_amt" type="number" step="0.01" min="0" required></label>
+      <label class="inline"><input id="p_adv" type="checkbox" checked> Move the due date to the next one</label>
+      <p id="payNote" class="muted"></p>
+    </div>
+    <div class="dlg-foot"><span id="payErr" class="error" role="alert"></span><button type="button" data-close>Cancel</button><button class="primary" type="submit">Record payment</button></div>
+  </form>
+</dialog>
+
+<!-- Payment history -->
+<dialog id="histDlg" aria-labelledby="histTitle">
+  <div class="dlg-head"><h2 id="histTitle">Payment history</h2><button type="button" class="ghost" data-close aria-label="Close">&#10005;</button></div>
+  <div class="dlg-body">
+    <table class="mini"><thead><tr><th>Date paid</th><th class="n">Amount</th><th>Was due</th></tr></thead><tbody id="histBody"></tbody></table>
+    <p id="histEmpty" class="empty" hidden>No payments recorded yet.</p>
+  </div>
+  <div class="dlg-foot"><span id="histErr" class="error" role="alert"></span><button id="btnUndo" class="danger">Undo latest payment</button><button type="button" data-close>Close</button></div>
+</dialog>
+
+<!-- Accounts -->
+<dialog id="acctDlg" aria-labelledby="acctTitle">
+  <div class="dlg-head"><h2 id="acctTitle">Manage accounts</h2><button type="button" class="ghost" data-close aria-label="Close">&#10005;</button></div>
+  <div class="dlg-body">
+    <p class="muted">Accounts you pay bills from. Names only; no balances are kept.</p>
+    <ul id="acctList" class="plain"></ul>
+    <form id="acctForm" class="row addrow">
+      <label>New account <input id="a_new" maxlength="60" autocomplete="off" required></label>
+      <button class="primary" type="submit">Add</button>
+    </form>
+  </div>
+  <div class="dlg-foot"><span id="acctErr" class="error" role="alert"></span><button type="button" data-close>Close</button></div>
+</dialog>
+
+<!-- Import -->
+<dialog id="impDlg" class="wide" aria-labelledby="impTitle">
+  <div class="dlg-head"><h2 id="impTitle">Import bills</h2><button type="button" class="ghost" data-close aria-label="Close">&#10005;</button></div>
+  <div class="dlg-body col">
+    <p class="muted">Choose a bills file (.json, or a .csv with the same columns as Export CSV). You will see what is in it before anything is added. A bill whose name already exists is skipped, so it is safe to import twice.</p>
+    <input id="impFile" type="file" accept=".json,.csv,application/json,text/csv">
+    <div id="impPreview" hidden>
+      <p id="impSummary"></p>
+      <div class="scroll"><table class="mini"><thead><tr><th>Bill</th><th>Account</th><th class="n">Amount</th><th>Due</th><th>Repeats</th></tr></thead><tbody id="impBody"></tbody></table></div>
+    </div>
+  </div>
+  <div class="dlg-foot"><span id="impErr" class="error" role="alert"></span><button type="button" data-close>Cancel</button><button id="impGo" class="primary" disabled>Import</button></div>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='app.js') }}"></script>{% endblock %}

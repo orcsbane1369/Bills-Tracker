@@ -1,0 +1,25 @@
+# Secrets and your data: never commit these
+.env
+.env.*
+!.env.example
+instance/
+data/
+*.db
+*.db-journal
+secret_key
+# Your own bill files (the repository is public)
+bills-import*.json
+bills-*.csv
+
+# Python / tooling
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

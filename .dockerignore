@@ -1,0 +1,12 @@
+instance/
+__pycache__/
+*.pyc
+*.db
+.venv/
+test_*.py
+deploy/
+.github/
+*.md
+.env
+.env.*
+!.env.example

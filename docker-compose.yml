@@ -1,0 +1,31 @@
+# Works with `docker compose up -d` (or Unraid's Compose Manager plugin). To update: `docker compose pull && docker compose up -d`
+# The image is built by GitHub on every push (see .github/workflows), so nothing is built on the server.
+# Settings live in a file named `.env` next to this one (copy `.env.example`). Fixed project name:
+name: billstracker
+
+services:
+  billstracker:
+    image: ghcr.io/orcsbane1369/bills-tracker:latest
+    container_name: billstracker
+    restart: unless-stopped
+    user: "99:100"            # Unraid's nobody:users; owns the data folder
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/orcsbane1369/Bills-Tracker/main/static/icon.png"
+      net.unraid.docker.webui: "http://[IP]:5006"
+    ports:
+      - "${BT_PORT:-5006}:5000"   # host port -> app. Do not forward this port on your router.
+    environment:
+      BT_BEHIND_PROXY: "${BT_BEHIND_PROXY:-1}"
+      BT_HTTPS: "${BT_HTTPS:-1}"
+      BT_CLIENT_IP_HEADER: "${BT_CLIENT_IP_HEADER:-CF-Connecting-IP}"
+      BT_ALLOW_REGISTRATION: "${BT_ALLOW_REGISTRATION:-0}"
+      BT_REGISTER_CODE: "${BT_REGISTER_CODE:-}"
+    volumes:
+      - "${BT_DATA_DIR:-/mnt/user/appdata/billstracker}:/data"   # database + session key
